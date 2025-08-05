@@ -1,51 +1,37 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GPS ART Mini App</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <title>GPS ART на Яндекс.Картах</title>
+  <script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU&apikey=93cd3342-0be2-4e39-845f-bf0c14234678" type="text/javascript"></script>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Arial', sans-serif; }
-    body, html { height: 100%; width: 100%; }
-    #map { height: 100vh; width: 100%; }
-
-    /* Контролы */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body, #map { width: 100%; height: 100%; }
     .controls {
       position: absolute;
       top: 15px;
       left: 50%;
       transform: translateX(-50%);
-      display: flex;
-      gap: 12px;
       z-index: 1000;
-      background: rgba(255, 255, 255, 0.15);
+      display: flex;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.2);
       padding: 8px 12px;
       border-radius: 12px;
       backdrop-filter: blur(8px);
     }
-
-    button {
-      padding: 10px 16px;
-      font-size: 15px;
+    button, select {
+      padding: 8px 14px;
       border: none;
-      border-radius: 8px;
+      border-radius: 6px;
       cursor: pointer;
-      color: white;
-      transition: all 0.2s ease;
+      font-size: 14px;
     }
-
-    button:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .pause { background: linear-gradient(135deg, #ff9800, #ffb74d); }
-    .resume { background: linear-gradient(135deg, #4caf50, #81c784); }
-    .pause:hover:not(:disabled) { background: linear-gradient(135deg, #fb8c00, #ffa726); }
-    .resume:hover:not(:disabled) { background: linear-gradient(135deg, #43a047, #66bb6a); }
+    button { color: white; }
+    .pause { background: orange; }
+    .resume { background: green; }
   </style>
 </head>
 <body>
@@ -53,29 +39,75 @@
   <div class="controls">
     <button id="pauseBtn" class="pause">⏸ Пауза</button>
     <button id="resumeBtn" class="resume" disabled>▶ Продолжить</button>
+    <select id="mapType">
+      <option value="yandex#map">Схема</option>
+      <option value="yandex#satellite">Спутник</option>
+      <option value="yandex#hybrid">Гибрид</option>
+    </select>
   </div>
-
+  
   <script>
     const tg = window.Telegram.WebApp;
     tg.expand();
 
-    // Карта
-    const map = L.map('map').setView([0, 0], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors'
-    }).addTo(map);
-
-    const polyline = L.polyline([], { color: 'red', weight: 4 }).addTo(map);
+    let map, polyline;
     let isPaused = false;
     let lastPointBeforePause = null;
 
-    // Кнопки
+    ymaps.ready(init);
+
+    function init() {
+      map = new ymaps.Map("map", {
+        center: [55.751244, 37.618423], // Москва по умолчанию
+        zoom: 16,
+        type: "yandex#map",
+        controls: []
+      });
+
+      polyline = new ymaps.Polyline([], {}, { strokeColor: '#FF0000', strokeWidth: 4 });
+      map.geoObjects.add(polyline);
+
+      // Переключение типа карты
+      document.getElementById('mapType').addEventListener('change', (e) => {
+        map.setType(e.target.value);
+      });
+
+      // GPS отслеживание
+      if (navigator.geolocation) {
+        navigator.geolocation.watchPosition(
+          (pos) => {
+            const { latitude, longitude } = pos.coords;
+            const currentPoint = [latitude, longitude];
+            map.setCenter(currentPoint);
+
+            if (!isPaused) {
+              const coords = polyline.geometry.getCoordinates();
+              if (lastPointBeforePause) {
+                coords.push(lastPointBeforePause);
+                coords.push(currentPoint);
+                lastPointBeforePause = null;
+              } else {
+                coords.push(currentPoint);
+              }
+              polyline.geometry.setCoordinates(coords);
+            }
+          },
+          (err) => console.error(err),
+          { enableHighAccuracy: true }
+        );
+      } else {
+        alert("Геолокация не поддерживается вашим устройством.");
+      }
+    }
+
+    // Кнопки паузы/продолжения
     const pauseBtn = document.getElementById('pauseBtn');
     const resumeBtn = document.getElementById('resumeBtn');
 
     pauseBtn.addEventListener('click', () => {
       isPaused = true;
-      lastPointBeforePause = polyline.getLatLngs().slice(-1)[0] || null;
+      const coords = polyline.geometry.getCoordinates();
+      lastPointBeforePause = coords[coords.length - 1] || null;
       pauseBtn.disabled = true;
       resumeBtn.disabled = false;
     });
@@ -86,35 +118,10 @@
       resumeBtn.disabled = true;
     });
 
-    // GPS отслеживание
-    if (navigator.geolocation) {
-      navigator.geolocation.watchPosition(
-        (pos) => {
-          const { latitude, longitude } = pos.coords;
-          const currentPoint = [latitude, longitude];
-          map.setView(currentPoint, 16);
-
-          if (!isPaused) {
-            if (lastPointBeforePause) {
-              polyline.addLatLng([lastPointBeforePause.lat, lastPointBeforePause.lng]);
-              polyline.addLatLng(currentPoint);
-              lastPointBeforePause = null;
-            } else {
-              polyline.addLatLng(currentPoint);
-            }
-          }
-        },
-        (err) => console.error(err),
-        { enableHighAccuracy: true }
-      );
-    } else {
-      alert("Геолокация не поддерживается вашим устройством.");
-    }
-
-    // Кнопка Telegram "Сохранить"
+    // Telegram MainButton
     tg.MainButton.setText("Сохранить GPS ART").show();
     tg.MainButton.onClick(() => {
-      const coords = polyline.getLatLngs().map(p => [p.lat, p.lng]);
+      const coords = polyline.geometry.getCoordinates();
       tg.sendData(JSON.stringify(coords));
     });
   </script>
