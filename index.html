@@ -38,7 +38,7 @@
   <div id="map"></div>
   <div class="controls">
     <button id="pauseBtn" class="pause">⏸ Пауза</button>
-    <button id="resumeBtn" class="resume" disabled>▶ Продолжить</button>
+    <button id="resumeBtn" class="resume" style="display:none;">▶ Продолжить</button>
     <select id="mapType">
       <option value="yandex#map">Схема</option>
       <option value="yandex#satellite">Спутник</option>
@@ -108,14 +108,14 @@
       isPaused = true;
       const coords = polyline.geometry.getCoordinates();
       lastPointBeforePause = coords[coords.length - 1] || null;
-      pauseBtn.disabled = true;
-      resumeBtn.disabled = false;
+      pauseBtn.style.display = "none";
+      resumeBtn.style.display = "inline-block";
     });
 
     resumeBtn.addEventListener('click', () => {
       isPaused = false;
-      pauseBtn.disabled = false;
-      resumeBtn.disabled = true;
+      pauseBtn.style.display = "inline-block";
+      resumeBtn.style.display = "none";
     });
 
     // Telegram MainButton
